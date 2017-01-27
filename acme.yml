@@ -1,0 +1,379 @@
+ga:
+  view_id:  # Google Analytics source view, e.g. "ga:12345678".
+  email:  # Service account email,
+          # e.g. "ermak-service-account@ermak-app.iam.gserviceaccount.com".
+  key_file:  # Absolute or relative path to a key file, e.g. "acme.pem",
+             # "keys/acme.pem", or "/home/acme/ermak/key.pem".
+db:
+  host:  # Database server hostname, e.g. "localhost".
+  user:  # Login used to connect to database server, e.g. "ermak".
+  passwd:  # Password used to connect to database server, e.g. "otvrudTyruWyk8".
+  db:  # Database name, e.g. "ermak".
+  prefix:  # Table names prefix that will replace caret symbol ^ in all table
+           # names and SQL queries specified below, e.g. "acme_".
+big_bang:  # The first date to start query data from Google Analytics source
+           # view, e.g. "2017-01-27". Value of this parameter MUST be enclosed
+           # with quotes.
+
+bootstrap:  # SQL queries used to initialize data base tables.
+  - |
+    CREATE TABLE IF NOT EXISTS ^report1 (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      source_medium VARCHAR(255),
+      campaign VARCHAR(255),
+      ad_group VARCHAR(255),
+      sessions TINYINT UNSIGNED ,
+      PRIMARY KEY (tick, cid, uid)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^report2 (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      keyword VARCHAR(1024),
+      landing_page_path VARCHAR(2048),
+      device_category VARCHAR(255),
+      sessions TINYINT UNSIGNED,
+      PRIMARY KEY (tick, cid, uid)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^report3 (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      country VARCHAR(255),
+      city VARCHAR(255),
+      sessions TINYINT UNSIGNED,
+      PRIMARY KEY (tick, cid, uid)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^report4 (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      ad_placement_domain VARCHAR(255),
+      sessions TINYINT UNSIGNED,
+      PRIMARY KEY (tick, cid, uid)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^report5 (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      device_category VARCHAR(255),
+      source_medium VARCHAR(255),
+      transaction_id VARCHAR(255),
+      transaction_revenue DECIMAL(12,2),
+      PRIMARY KEY (uid, tick, cid, transaction_id)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^sessions (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      source_medium VARCHAR(255),
+      campaign VARCHAR(255),
+      ad_group VARCHAR(255),
+      keyword VARCHAR(1024),
+      landing_page_path VARCHAR(2048),
+      device_category VARCHAR(255),
+      ad_placement_domain VARCHAR(255),
+      country VARCHAR(255),
+      city VARCHAR(255),
+      PRIMARY KEY (cid, tick, uid),
+      INDEX (tick)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^transactions (
+      tick DATETIME,
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      previous_tick DATETIME,
+      device_category VARCHAR(255),
+      source_medium VARCHAR(255),
+      transaction_id VARCHAR(255),
+      transaction_revenue DECIMAL(12,2),
+      PRIMARY KEY (tick, cid, uid, transaction_id),
+      INDEX (transaction_id)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^cids_uids (
+      cid VARCHAR(32),
+      uid VARCHAR(32),
+      PRIMARY KEY (cid, uid),
+      INDEX(uid)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+  - |
+    CREATE TABLE IF NOT EXISTS ^hits (
+      transaction_tick DATETIME,
+      transaction_id VARCHAR(255),
+      session_tick DATETIME,
+      uid VARCHAR(32),
+      cid VARCHAR(32),
+      source_medium VARCHAR(255),
+      campaign VARCHAR(255),
+      ad_group VARCHAR(255),
+      keyword VARCHAR(1024),
+      landing_page_path VARCHAR(2048),
+      device_category VARCHAR(255),
+      ad_placement_domain VARCHAR(255),
+      country VARCHAR(255),
+      city VARCHAR(255),
+      transaction_revenue DECIMAL(12,2),
+      seq SMALLINT UNSIGNED DEFAULT 0,
+      sent TINYINT UNSIGNED DEFAULT 0,
+      PRIMARY KEY (transaction_id, session_tick),
+      INDEX (sent, transaction_tick, transaction_id,
+             session_tick, uid, cid)
+    )
+    DEFAULT CHARACTER SET = utf8
+    COLLATE = utf8_general_ci
+
+extract:  # Data extraction configurations.
+  - table: ^report1  # Table to store data exctracted from Google Analytics
+                     # source view.
+    datetime_field: tick  # Table's field where row's timestamp is stored.
+                          # Used to determine the date of the newest data
+                          # in the table.
+    dimensions:  # List of Google Analytics dimensions to query from source
+                 # view.
+      - ga:hour
+      - ga:minute
+      - ga:dimension1
+      - ga:dimension2
+      - ga:sourceMedium
+      - ga:campaign
+      - ga:adGroup
+    metrics:  # List of Google Analytics metrics to query from source view.
+      - ga:sessions
+    values: >-  # Template used to compose rows of values to be inserted
+                # into the table.
+      '%(date)s %(ga:hour)s:%(ga:minute)s', '%(ga:dimension1)s',
+      '%(ga:dimension2)s', '%(ga:sourceMedium)s', '%(ga:campaign)s',
+      '%(ga:adGroup)s', %(ga:sessions)s
+  - table: ^report2
+    datetime_field: tick
+    dimensions:
+      - ga:hour
+      - ga:minute
+      - ga:dimension1
+      - ga:dimension2
+      - ga:keyword
+      - ga:landingPagePath
+      - ga:deviceCategory
+    metrics:
+      - ga:sessions
+    values: >-
+      '%(date)s %(ga:hour)s:%(ga:minute)s', '%(ga:dimension1)s',
+      '%(ga:dimension2)s', '%(ga:keyword)s', '%(ga:landingPagePath)s',
+      '%(ga:deviceCategory)s', %(ga:sessions)s
+  - table: ^report3
+    datetime_field: tick
+    dimensions:
+      - ga:hour
+      - ga:minute
+      - ga:dimension1
+      - ga:dimension2
+      - ga:country
+      - ga:city
+    metrics:
+      - ga:sessions
+    values: >-
+      '%(date)s %(ga:hour)s:%(ga:minute)s', '%(ga:dimension1)s',
+      '%(ga:dimension2)s', '%(ga:country)s', '%(ga:city)s', %(ga:sessions)s
+  - table: ^report4
+    datetime_field: tick
+    dimensions:
+      - ga:hour
+      - ga:minute
+      - ga:dimension1
+      - ga:dimension2
+      - ga:adPlacementDomain
+    metrics:
+      - ga:sessions
+    values: >-
+      '%(date)s %(ga:hour)s:%(ga:minute)s', '%(ga:dimension1)s',
+      '%(ga:dimension2)s', '%(ga:adPlacementDomain)s', %(ga:sessions)s
+  - table: ^report5
+    datetime_field: tick
+    dimensions:
+      - ga:hour
+      - ga:minute
+      - ga:dimension1
+      - ga:dimension2
+      - ga:deviceCategory
+      - ga:sourceMedium
+      - ga:transactionId
+    metrics:
+      - ga:transactionRevenue
+    values: >-
+      '%(date)s %(ga:hour)s:%(ga:minute)s', '%(ga:dimension1)s',
+      '%(ga:dimension2)s', '%(ga:deviceCategory)s', '%(ga:sourceMedium)s',
+      '%(ga:transactionId)s', %(ga:transactionRevenue)s
+
+process:  # Data processing SQL queries.
+  - title: update sessions from report1
+    sql: |
+      INSERT IGNORE ^sessions
+      SELECT ^report1.tick, ^report1.cid, ^report1.uid,
+             source_medium, campaign, ad_group, keyword,
+             landing_page_path, device_category,
+             ad_placement_domain, country, city
+      FROM ^report1
+      LEFT JOIN ^report2 USING(tick, cid, uid)
+      LEFT JOIN ^report3 USING(tick, cid, uid)
+      LEFT JOIN ^report4 USING(tick, cid, uid)
+  - title: update sessions from report2
+    sql: |
+      INSERT IGNORE ^sessions
+      SELECT ^report2.tick, ^report2.cid, ^report2.uid,
+             source_medium, campaign, ad_group, keyword,
+             landing_page_path, device_category,
+             ad_placement_domain, country, city
+      FROM ^report2
+      LEFT JOIN ^report1 USING(tick, cid, uid)
+      LEFT JOIN ^report3 USING(tick, cid, uid)
+      LEFT JOIN ^report4 USING(tick, cid, uid)
+  - title: update sessions from report3
+    sql: |
+      INSERT IGNORE ^sessions
+      SELECT ^report3.tick, ^report3.cid, ^report3.uid,
+             source_medium, campaign, ad_group, keyword,
+             landing_page_path, device_category,
+             ad_placement_domain, country, city
+      FROM ^report3
+      LEFT JOIN ^report1 USING(tick, cid, uid)
+      LEFT JOIN ^report2 USING(tick, cid, uid)
+      LEFT JOIN ^report4 USING(tick, cid, uid)
+  - title: update sessions from report4
+    sql: |
+      INSERT IGNORE ^sessions
+      SELECT ^report4.tick, ^report4.cid, ^report4.uid,
+             source_medium, campaign, ad_group, keyword,
+             landing_page_path, device_category,
+             ad_placement_domain, country, city
+      FROM ^report4
+      LEFT JOIN ^report1 USING(tick, cid, uid)
+      LEFT JOIN ^report2 USING(tick, cid, uid)
+      LEFT JOIN ^report3 USING(tick, cid, uid)
+  - title: update transactions
+    sql: |
+      INSERT IGNORE ^transactions
+      SELECT r1.tick, r1.cid, r1.uid,
+             MAX(IFNULL(r2.tick, '2000-01-01')),
+             r1.device_category, r1.source_medium,
+             r1.transaction_id, r1.transaction_revenue
+      FROM ^report5 r1
+      LEFT JOIN ^report5 r2
+      ON r2.uid = r1.uid AND r2.tick < r1.tick
+      GROUP BY r1.tick, r1.cid, r1.uid, r1.device_category, r1.source_medium,
+               r1.transaction_id, r1.transaction_revenue
+  - title: update cids_uids
+    sql: |
+      INSERT IGNORE ^cids_uids
+      SELECT DISTINCT cid, uid
+      FROM ^sessions
+      WHERE uid <> 'none'
+  - title: update hits
+    sql: |
+      INSERT IGNORE ^hits
+      SELECT ^transactions.tick, transaction_id,
+             IFNULL(^sessions.tick, ^transactions.tick),
+             ^transactions.uid, ^transactions.cid, ^sessions.source_medium,
+             campaign, ad_group, keyword, landing_page_path,
+             ^sessions.device_category, ad_placement_domain, country, city,
+             transaction_revenue, 0, 0
+      FROM ^transactions
+      LEFT JOIN ^cids_uids ON ^cids_uids.uid = ^transactions.uid
+      JOIN ^sessions ON ^sessions.cid = ^cids_uids.cid AND
+           ^sessions.tick <= ^transactions.tick AND
+           ^sessions.tick > ^transactions.previous_tick
+  - title: adding transaction hits
+    sql: |
+      INSERT IGNORE ^hits
+             (transaction_tick, transaction_id, session_tick, device_category,
+              source_medium, uid, cid, transaction_revenue, sent)
+      SELECT tick, transaction_id, '2100-01-01 00:00:00', device_category,
+             source_medium, uid, cid, transaction_revenue, 0
+      FROM ^transactions
+  - title: enumerate hits
+    sql: |
+      SET @s := 0;
+      SET @t := 0;
+      UPDATE ^hits
+      SET seq = IF(transaction_id = @t,
+                   @s := @s + (session_tick <> '2100-01-01 00:00:00'),
+                   (@t := transaction_id) && (@s := 0))
+      ORDER BY transaction_tick, transaction_id, session_tick
+
+send:
+  sql: |  # SQL query used to produce Measurement Protocol parameters for hits
+          # that will be sent to Google Analytics target property.
+    SELECT CONCAT(transaction_id, session_tick) AS hit_id,
+           # hit_id is used in flush query (see below) to mark hits taht were
+           # sent to Google Analytics. This filed is not used as Measurement
+           # Protocol parameter.
+           (session_tick < '2100-01-01') AS is_new_session,
+           # If is_new_session is true, then Ermak will wait until 90 seconds
+           # passed since last hit with the same wait_key. This filed is not
+           # used as Measurement Protocol parameter.
+           transaction_id AS wait_key,
+           # wait_key is expected to be the same for hits belonging to the same
+           # session. Used to determine whether Ermak have to wait 90 seconds
+           # since previous hit. This filed is not used as Measurement Protocol
+           # parameter.
+           1 AS v,
+           'UA-xxxxxxxx-1' AS tid,  # Tracking ID of target Google Analytics
+                                    # property. Don't forget to change it!
+           '1.2.3.4' AS uip,
+           IF(session_tick < '2100-01-01', 'pageview', 'transaction') AS t,
+           IF(session_tick < '2100-01-01', 'start', 'end') AS sc,
+           IF(session_tick < '2100-01-01', NULL, transaction_id) AS ti,
+           IF(session_tick < '2100-01-01',
+              DATE_FORMAT(session_tick, '%Y-%m-%d'),
+              DATE_FORMAT(transaction_tick, '%Y-%m-%d')) AS cd1,
+              # In this example, cd1 is a custom dimension used to store actual
+              # session date.
+           cid,
+           uid,
+           cid AS cd2,  # Custom dimension for Client ID (for debuging).
+           uid AS cd3,  # Custom dimension for User ID (for debuging).
+           SUBSTRING_INDEX(source_medium, ' / ', 1) AS cs,
+           SUBSTRING_INDEX(source_medium, ' / ', -1) AS cm,
+           campaign AS cn,
+           ad_group AS cc,
+           CONCAT(IFNULL(keyword, ''),
+                  '|',
+                  IFNULL(ad_placement_domain, '')) AS ck,
+           country AS cd4,  # Custom dimension for country.
+           city AS cd5,  # Custom dimension for city.
+           landing_page_path AS dl,
+           device_category AS cd6,  # Custom dimension for device category.
+           transaction_revenue AS tr
+    FROM ^hits
+    WHERE sent = 0
+    ORDER BY seq, transaction_tick, transaction_id, session_tick, uid, cid
+  flush: |  # SQL query used to mark hits that had been successfully sent
+            # to target Google Analytics property.
+    UPDATE ^hits
+    SET sent = 1
+    WHERE CONCAT(transaction_id, session_tick) IN(%s)
+
