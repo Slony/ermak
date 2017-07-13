@@ -1,0 +1,5 @@
+google-api-python-client
+MySQL-python
+oauth2client==1.5.2
+urlfetch
+
